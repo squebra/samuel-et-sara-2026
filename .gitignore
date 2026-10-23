@@ -5,3 +5,6 @@ LISEZMOI.txt
 .wrangler/
 node_modules/
 .DS_Store
+importer-photos.mjs
+.dev.vars
+.claude/

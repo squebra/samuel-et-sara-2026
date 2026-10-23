@@ -315,6 +315,10 @@
   #queue .st { width: 76px; text-align: right; font-size: 11px; color: #7a6a54; flex-shrink: 0; }
   #queue li.ok .st { color: #4a7a4a; } #queue li.ko .st { color: #9b2d20; }
   .toolbar { display: flex; justify-content: space-between; align-items: center; font-size: 13px; color: #7a6a54; font-weight: 300; margin-bottom: 10px; }
+  .tabs { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; margin-bottom: 18px; }
+  .tab { background: transparent; color: #7a6a54; border: 1px solid #e0d8cc; padding: 10px 14px; font-family: 'Montserrat', sans-serif; font-size: 11px; letter-spacing: .2em; text-transform: uppercase; cursor: pointer; transition: all .2s; }
+  .tab:hover { border-color: #c8a97e; color: #9a7a50; }
+  .tab.on { background: #1a1410; border-color: #1a1410; color: #c8a97e; }
   #grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; }
   @media (min-width: 560px) { #grid { grid-template-columns: repeat(4, 1fr); gap: 6px; } }
   @media (min-width: 800px) { #grid { grid-template-columns: repeat(5, 1fr); } }
@@ -396,6 +400,7 @@ Samuel et Sara
       <ul id="queue"></ul>
 
       <h3 class="sub-label" data-t="galleryTitle"></h3>
+      <div class="tabs" id="tabs" role="tablist"></div>
       <div class="toolbar"><span id="count"></span><button class="btn ghost" type="button" id="logout" data-t="logout"></button></div>
       <div id="grid"></div>
       <p id="empty" class="hidden" data-t="empty"></p>
@@ -440,6 +445,8 @@ Samuel et Sara
       addTitle: 'Déposer vos souvenirs', choose: 'Choisir des photos / vidéos',
       limits: 'Photos et vidéos · 100 Mo maximum par fichier',
       galleryTitle: "L'album", logout: 'Quitter', empty: "Aucune photo pour l'instant. Soyez les premiers !",
+      emptyPro: 'Les photos arrivent bientôt.',
+      tabs: { ceremonie: 'Cérémonie', mairie: 'Mairie', photobooth: 'Photobooth', invites: 'Invités' },
       more: 'Voir plus', download: 'Télécharger', close: 'Fermer',
       photos: function (n) { return n + (n > 1 ? ' fichiers affichés' : ' fichier affiché'); },
       waiting: 'En attente', sending: 'Envoi…', done: 'Envoyé', tooBig: 'Trop lourd (>100 Mo)', badType: 'Format non pris en charge', failed: 'Échec',
@@ -456,6 +463,8 @@ Samuel et Sara
       addTitle: 'Compartilhe suas lembranças', choose: 'Escolher fotos / vídeos',
       limits: 'Fotos e vídeos · máximo de 100 MB por arquivo',
       galleryTitle: 'O álbum', logout: 'Sair', empty: 'Ainda não há fotos. Seja o primeiro!',
+      emptyPro: 'As fotos chegam em breve.',
+      tabs: { ceremonie: 'Cerimônia', mairie: 'Civil', photobooth: 'Photobooth', invites: 'Convidados' },
       more: 'Ver mais', download: 'Baixar', close: 'Fechar',
       photos: function (n) { return n + (n > 1 ? ' arquivos exibidos' : ' arquivo exibido'); },
       waiting: 'Na fila', sending: 'Enviando…', done: 'Enviado', tooBig: 'Muito grande (>100 MB)', badType: 'Formato não suportado', failed: 'Falhou',
@@ -472,11 +481,14 @@ Samuel et Sara
   try { token = localStorage.getItem(KEY) || ''; } catch (e) {}
   function saveToken(t) { token = t; try { t ? localStorage.setItem(KEY, t) : localStorage.removeItem(KEY); } catch (e) {} }
 
+  // Onglets : photos du photographe (pro/) puis celles des invités (orig/)
+  var ALBUMS = ['ceremonie', 'mairie', 'photobooth', 'invites'];
+  var album = ALBUMS[0], gen = 0; // gen change à chaque onglet : on ignore les réponses d'un ancien onglet
   var items = [], cursor = null, truncated = false, loading = false;
 
   function fileUrl(key, dl) { return API + '/api/file?key=' + encodeURIComponent(key) + '&t=' + encodeURIComponent(token) + (dl ? '&dl=1' : ''); }
   function show(logged) { $('login').classList.toggle('hidden', logged); $('album').classList.toggle('hidden', !logged); }
-  function logout() { saveToken(''); items = []; $('grid').innerHTML = ''; show(false); }
+  function logout() { saveToken(''); gen++; items = []; $('grid').innerHTML = ''; show(false); }
 
   function api(path, opts) {
     opts = opts || {};
@@ -503,7 +515,27 @@ Samuel et Sara
   });
   $('logout').addEventListener('click', logout);
 
-  function enter() { show(true); items = []; cursor = null; $('grid').innerHTML = ''; loadMore(); }
+  function enter() { show(true); setAlbum(album); }
+
+  /* ---------- Onglets ---------- */
+  ALBUMS.forEach(function (a) {
+    var b = document.createElement('button');
+    b.type = 'button'; b.className = 'tab'; b.setAttribute('role', 'tab'); b.setAttribute('data-album', a); b.textContent = T.tabs[a];
+    b.addEventListener('click', function () { if (a !== album) setAlbum(a); });
+    $('tabs').appendChild(b);
+  });
+
+  function setAlbum(a) {
+    album = a; gen++;
+    items = []; cursor = null; truncated = false; loading = false;
+    $('grid').innerHTML = ''; $('count').textContent = '';
+    $('empty').classList.add('hidden'); $('more').classList.add('hidden');
+    $('tabs').querySelectorAll('.tab').forEach(function (b) {
+      var on = b.getAttribute('data-album') === a;
+      b.classList.toggle('on', on); b.setAttribute('aria-selected', on ? 'true' : 'false');
+    });
+    return loadMore();
+  }
 
   /* ---------- Galerie ---------- */
   function isVideo(it) { return (it.type || '').indexOf('video/') === 0 || /\.(mp4|mov|m4v|webm|3gp)$/i.test(it.name); }
@@ -526,6 +558,7 @@ Samuel et Sara
 
   function refreshMeta() {
     $('count').textContent = items.length ? T.photos(items.length) : '';
+    $('empty').textContent = album === 'invites' ? T.empty : T.emptyPro;
     $('empty').classList.toggle('hidden', items.length > 0);
     $('more').classList.toggle('hidden', !truncated);
   }
@@ -533,9 +566,11 @@ Samuel et Sara
   function loadMore() {
     if (loading) return Promise.resolve();
     loading = true;
-    return api('/api/list?limit=60' + (cursor ? '&cursor=' + encodeURIComponent(cursor) : ''))
+    var g0 = gen;
+    return api('/api/list?album=' + album + '&limit=60' + (cursor ? '&cursor=' + encodeURIComponent(cursor) : ''))
       .then(function (r) { return r.json(); })
       .then(function (d) {
+        if (g0 !== gen) return;
         var g = $('grid');
         (d.items || []).forEach(function (it) {
           if (items.some(function (x) { return x.id === it.id; })) return;
@@ -544,9 +579,15 @@ Samuel et Sara
         cursor = d.cursor; truncated = !!d.truncated; refreshMeta();
       })
       .catch(function () {})
-      .then(function () { loading = false; });
+      .then(function () { if (g0 === gen) loading = false; });
   }
   $('more').addEventListener('click', loadMore);
+  // Charge la suite tout seul quand on arrive en bas de la galerie
+  if ('IntersectionObserver' in window) {
+    new IntersectionObserver(function (es) {
+      if (es[0].isIntersecting && truncated && !loading) loadMore();
+    }, { rootMargin: '600px' }).observe($('more'));
+  }
 
   /* ---------- Envoi ---------- */
   var queue = [], active = 0;
@@ -580,6 +621,7 @@ Samuel et Sara
   }
 
   function addFiles(list) {
+    if (list.length && album !== 'invites') setAlbum('invites'); // les envois des invités vont dans leur onglet
     Array.prototype.forEach.call(list, function (f) {
       var li = document.createElement('li');
       li.innerHTML = '<span class="nm"></span><span class="bar"><b></b></span><span class="st"></span>';
@@ -653,6 +695,7 @@ Samuel et Sara
       })
       .then(function (tb) {
         job.li.className = 'ok'; job.st.textContent = T.done; job.bar.style.width = '100%';
+        if (album !== 'invites') return;
         var it = { id: id, key: 'orig/' + id + '/' + safeName(f.name), name: f.name, size: f.size, type: job.type };
         items.unshift(it);
         var el = tile(it, tb ? URL.createObjectURL(tb) : null);
@@ -670,13 +713,18 @@ Samuel et Sara
     cur = i; var it = items[i];
     $('lb').classList.remove('hidden'); document.body.style.overflow = 'hidden';
     $('lbName').textContent = it.name;
-    var src = fileUrl(realKey(it));
+    var orig = fileUrl(realKey(it));
+    // Photos du photographe : version allégée à l'écran, original au téléchargement
+    var src = it.view && !isVideo(it) ? fileUrl('view/' + it.id + '.jpg') : orig;
     var st = $('lbStage');
     var old = st.querySelector('img,video,.msg'); while (old) { old.remove(); old = st.querySelector('img,video,.msg'); }
     var el;
     if (isVideo(it)) { el = document.createElement('video'); el.controls = true; el.playsInline = true; el.autoplay = true; el.src = src; }
     else { el = document.createElement('img'); el.alt = it.name; el.src = src; }
-    el.onerror = function () { el.remove(); var m = document.createElement('p'); m.className = 'msg'; m.textContent = T.noPreview; st.appendChild(m); };
+    el.onerror = function () {
+      if (src !== orig) { src = orig; el.src = orig; return; }
+      el.remove(); var m = document.createElement('p'); m.className = 'msg'; m.textContent = T.noPreview; st.appendChild(m);
+    };
     st.insertBefore(el, st.firstChild);
     $('lbDl').href = fileUrl(realKey(it), true);
     $('lbPrev').classList.toggle('hidden', i === 0);
