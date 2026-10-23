@@ -338,6 +338,12 @@
   #lb .nav { position: absolute; top: 50%; transform: translateY(-50%); background: rgba(26,20,16,.55); color: #fff; border: none; width: 44px; height: 64px; font-size: 26px; cursor: pointer; }
   #lb .prev { left: 0; } #lb .next { right: 0; }
   #lb .msg { color: #e9dfcc; text-align: center; padding: 20px; font-style: italic; }
+  /* Photobooth : sans cadre puis avec cadre, l'une sous l'autre */
+  #lb .pair { width: 100%; max-height: 100%; overflow-y: auto; display: flex; flex-direction: column; align-items: center; gap: 16px; padding: 6px 0 12px; }
+  #lb .pair figure { display: flex; flex-direction: column; align-items: center; max-width: 100%; }
+  #lb .stage .pair img { max-width: 100%; max-height: calc((100vh - 190px) / 2); object-fit: contain; }
+  #lb .pair figcaption { display: flex; align-items: center; gap: 12px; margin-top: 8px; color: #e9dfcc; font-size: 11px; letter-spacing: .18em; text-transform: uppercase; }
+  #lb .pair figcaption a { color: #c8a97e; border: 1px solid #c8a97e; padding: 7px 12px; text-decoration: none; }
 </style>
 </head>
 <body>
@@ -447,7 +453,7 @@ Samuel et Sara
       galleryTitle: "L'album", logout: 'Quitter', empty: "Aucune photo pour l'instant. Soyez les premiers !",
       emptyPro: 'Les photos arrivent bientôt.',
       tabs: { ceremonie: 'Cérémonie', mairie: 'Mairie', photobooth: 'Photobooth', invites: 'Invités' },
-      more: 'Voir plus', download: 'Télécharger', close: 'Fermer',
+      more: 'Voir plus', download: 'Télécharger', close: 'Fermer', noFrame: 'Sans cadre', withFrame: 'Avec cadre',
       photos: function (n) { return n + (n > 1 ? ' fichiers affichés' : ' fichier affiché'); },
       waiting: 'En attente', sending: 'Envoi…', done: 'Envoyé', tooBig: 'Trop lourd (>100 Mo)', badType: 'Format non pris en charge', failed: 'Échec',
       noPreview: 'Aperçu indisponible — téléchargez le fichier pour le voir.', video: 'VIDÉO'
@@ -465,7 +471,7 @@ Samuel et Sara
       galleryTitle: 'O álbum', logout: 'Sair', empty: 'Ainda não há fotos. Seja o primeiro!',
       emptyPro: 'As fotos chegam em breve.',
       tabs: { ceremonie: 'Cerimônia', mairie: 'Civil', photobooth: 'Photobooth', invites: 'Convidados' },
-      more: 'Ver mais', download: 'Baixar', close: 'Fechar',
+      more: 'Ver mais', download: 'Baixar', close: 'Fechar', noFrame: 'Sem moldura', withFrame: 'Com moldura',
       photos: function (n) { return n + (n > 1 ? ' arquivos exibidos' : ' arquivo exibido'); },
       waiting: 'Na fila', sending: 'Enviando…', done: 'Enviado', tooBig: 'Muito grande (>100 MB)', badType: 'Formato não suportado', failed: 'Falhou',
       noPreview: 'Pré-visualização indisponível — baixe o arquivo para ver.', video: 'VÍDEO'
@@ -707,7 +713,22 @@ Samuel et Sara
 
   /* ---------- Visionneuse ---------- */
   var cur = -1;
+  var LB_CONTENT = 'img,video,.msg,.pair';
   function realKey(it) { return it.key; }
+
+  // Une version de la photo avec son nom et son bouton Télécharger (Photobooth)
+  function figure(src, fallback, dl, label) {
+    var f = document.createElement('figure');
+    var img = document.createElement('img'); img.alt = label;
+    img.onerror = function () { if (fallback) { img.src = fallback; fallback = null; } else f.remove(); };
+    img.src = src;
+    var c = document.createElement('figcaption');
+    var s = document.createElement('span'); s.textContent = label;
+    var a = document.createElement('a'); a.href = dl; a.textContent = T.download;
+    c.appendChild(s); c.appendChild(a);
+    f.appendChild(img); f.appendChild(c);
+    return f;
+  }
   function openLb(i) {
     if (i < 0 || i >= items.length) return;
     cur = i; var it = items[i];
@@ -717,23 +738,31 @@ Samuel et Sara
     // Photos du photographe : version allégée à l'écran, original au téléchargement
     var src = it.view && !isVideo(it) ? fileUrl('view/' + it.id + '.jpg') : orig;
     var st = $('lbStage');
-    var old = st.querySelector('img,video,.msg'); while (old) { old.remove(); old = st.querySelector('img,video,.msg'); }
+    var old = st.querySelector(LB_CONTENT); while (old) { old.remove(); old = st.querySelector(LB_CONTENT); }
     var el;
-    if (isVideo(it)) { el = document.createElement('video'); el.controls = true; el.playsInline = true; el.autoplay = true; el.src = src; }
-    else { el = document.createElement('img'); el.alt = it.name; el.src = src; }
-    el.onerror = function () {
-      if (src !== orig) { src = orig; el.src = orig; return; }
-      el.remove(); var m = document.createElement('p'); m.className = 'msg'; m.textContent = T.noPreview; st.appendChild(m);
-    };
+    if (it.cadre) {
+      // Photobooth : la photo sans cadre, puis la même avec le cadre, chacune téléchargeable
+      el = document.createElement('div'); el.className = 'pair';
+      el.appendChild(figure(src, src !== orig ? orig : null, fileUrl(realKey(it), true), T.noFrame));
+      el.appendChild(figure(fileUrl(it.cadre), null, fileUrl(it.cadre, true), T.withFrame));
+    } else {
+      if (isVideo(it)) { el = document.createElement('video'); el.controls = true; el.playsInline = true; el.autoplay = true; el.src = src; }
+      else { el = document.createElement('img'); el.alt = it.name; el.src = src; }
+      el.onerror = function () {
+        if (src !== orig) { src = orig; el.src = orig; return; }
+        el.remove(); var m = document.createElement('p'); m.className = 'msg'; m.textContent = T.noPreview; st.appendChild(m);
+      };
+    }
     st.insertBefore(el, st.firstChild);
     $('lbDl').href = fileUrl(realKey(it), true);
+    $('lbDl').classList.toggle('hidden', !!it.cadre); // le Photobooth a un bouton par version
     $('lbPrev').classList.toggle('hidden', i === 0);
     $('lbNext').classList.toggle('hidden', i === items.length - 1 && !truncated);
   }
   function closeLb() {
     $('lb').classList.add('hidden'); document.body.style.overflow = '';
     var v = $('lbStage').querySelector('video'); if (v) v.pause();
-    var m = $('lbStage').querySelector('img,video,.msg'); while (m) { m.remove(); m = $('lbStage').querySelector('img,video,.msg'); }
+    var m = $('lbStage').querySelector(LB_CONTENT); while (m) { m.remove(); m = $('lbStage').querySelector(LB_CONTENT); }
   }
   function step(d) {
     if (cur + d >= items.length && truncated) { loadMore().then(function () { openLb(cur + d); }); return; }
