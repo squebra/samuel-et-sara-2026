@@ -1,0 +1,7 @@
+# Le Worker reste sur l'ordinateur : il est déployé sur Cloudflare, pas sur GitHub
+worker.js
+wrangler.toml
+LISEZMOI.txt
+.wrangler/
+node_modules/
+.DS_Store
